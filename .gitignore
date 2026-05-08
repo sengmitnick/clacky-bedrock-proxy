@@ -1,0 +1,26 @@
+/.bundle/
+/.yardoc
+/_yardoc/
+/coverage/
+/doc/
+/pkg/
+/spec/reports/
+/tmp/
+/workspace/
+/worktrees/
+
+# rspec failure tracking
+.rspec_status
+*.gem
+.DS_Store
+.history
+
+.clacky
+.env
+.feishu-token.json
+.baoyu-skills
+.sengclaw-skills
+.obsidian
+/docker/skills
+/docker/data
+venv/
