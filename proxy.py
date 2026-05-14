@@ -13,7 +13,7 @@ import logging
 import os
 import re
 import uuid
-from typing import Any, AsyncIterator
+from typing import Any, AsyncIterator, Optional, List
 
 import httpx
 from fastapi import FastAPI, Request
@@ -106,7 +106,7 @@ def extract_api_key(request: Request) -> str:
     return API_KEY
 
 
-def bedrock_client(api_key: str | None = None) -> httpx.AsyncClient:
+def bedrock_client(api_key: Optional[str] = None) -> httpx.AsyncClient:
     key = api_key or API_KEY
     return httpx.AsyncClient(
         base_url=BACKEND_URL,
@@ -201,15 +201,11 @@ def convert_content_block_to_bedrock(block: Any):
         if source.get("type") == "base64":
             media_type = source.get("media_type", "image/png")
             fmt = media_type.split("/")[-1] if "/" in media_type else media_type
-            # Bedrock 要求图片 bytes，不是 base64 字符串 — 修复来自 aws-samples
-            try:
-                image_bytes = base64.b64decode(source.get("data", ""))
-            except Exception:
-                image_bytes = source.get("data", "").encode()
+            # Bedrock HTTP API 的 bytes 字段接受 base64 字符串，直接传原始 data，无需 decode
             return {
                 "image": {
                     "format": fmt,
-                    "source": {"bytes": image_bytes},
+                    "source": {"bytes": source.get("data", "")},
                 }
             }
         return None
@@ -219,14 +215,11 @@ def convert_content_block_to_bedrock(block: Any):
         if url.startswith("data:"):
             match = re.match(r"^data:image/([^;]+);base64,(.*)$", url)
             if match:
-                try:
-                    image_bytes = base64.b64decode(match.group(2))
-                except Exception:
-                    image_bytes = match.group(2).encode()
+                # Bedrock HTTP API 的 bytes 字段接受 base64 字符串，直接传，无需 decode
                 return {
                     "image": {
                         "format": match.group(1),
-                        "source": {"bytes": image_bytes},
+                        "source": {"bytes": match.group(2)},
                     }
                 }
         return None
@@ -257,7 +250,7 @@ def convert_content_block_to_bedrock(block: Any):
     return None
 
 
-def convert_message_to_bedrock(msg: dict) -> dict | None:
+def convert_message_to_bedrock(msg: dict) -> Optional[dict]:
     """Anthropic message → Bedrock message"""
     role = msg.get("role", "user")
     content = msg.get("content", "")
@@ -317,7 +310,7 @@ def merge_consecutive_tool_results(messages: list[dict]) -> list[dict]:
     return merged
 
 
-def convert_tools_to_bedrock(tools: list[dict] | None, tool_choice: Any = None) -> dict | None:
+def convert_tools_to_bedrock(tools: Optional[List[dict]], tool_choice: Any = None) -> Optional[dict]:
     """Anthropic tools → Bedrock toolConfig"""
     if not tools:
         return None
@@ -366,13 +359,13 @@ def build_bedrock_request(
     messages: list[dict],
     model: str,
     system,
-    tools: list[dict] | None,
+    tools: Optional[List[dict]],
     max_tokens: int,
-    stop_sequences: list[str] | None = None,
-    temperature: float | None = None,
-    top_p: float | None = None,
-    top_k: int | None = None,
-    thinking: dict | None = None,
+    stop_sequences: Optional[List[str]] = None,
+    temperature: Optional[float] = None,
+    top_p: Optional[float] = None,
+    top_k: Optional[int] = None,
+    thinking: Optional[dict] = None,
     tool_choice: Any = None,
 ) -> dict:
     """构建完整的 Bedrock Converse API 请求体"""
@@ -422,7 +415,7 @@ def build_bedrock_request(
 
 # ── Response conversion: Bedrock → Anthropic ─────────────────────────────
 
-def convert_bedrock_block_to_anthropic(block: dict) -> dict | None:
+def convert_bedrock_block_to_anthropic(block: dict) -> Optional[dict]:
     """Bedrock content block → Anthropic block"""
     if "text" in block:
         return {"type": "text", "text": block["text"]}
@@ -923,7 +916,7 @@ async def health():
 
 if __name__ == "__main__":
     import uvicorn
-    port = int(os.environ.get("PORT", "8080"))
+    port = int(os.environ.get("PORT", "7878"))
     print(f"🦞 Clacky Bedrock Proxy starting on http://localhost:{port}")
     print(f"   Backend: {BACKEND_URL}")
     print(f"   Models:  {list(MODEL_MAP.keys())}")
